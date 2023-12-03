@@ -1,9 +1,4 @@
-*.mp3
-*.wav
-*.opus
-*.mp4
-*.avi
-*.mov
 .env
 
 __pycache__
+
