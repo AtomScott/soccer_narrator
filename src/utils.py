@@ -117,11 +117,11 @@ def generate_narration(
     return voiceover_narration
 
 
-def generate_audio(text, output_dir, model="tts-1", voice="alloy"):
+def generate_audio(text, output_path, model="tts-1", voice="alloy"):
     api_key = load_openai_key()
     client = OpenAI(api_key=api_key)
 
-    speech_file_path = Path(output_dir) / "speech.mp3"
+    speech_file_path = Path(output_path)
     response = client.audio.speech.create(model=model, voice=voice, input=text)
 
     response.stream_to_file(speech_file_path)
