@@ -1,16 +1,20 @@
 import base64
 import os
+import subprocess
+from pathlib import Path
 
 import cv2
 from dotenv import load_dotenv
+from moviepy.editor import (
+    AudioFileClip,
+    VideoFileClip,
+)
 from openai import OpenAI
-from pytube import YouTube
-from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_audioclips
+from pycaption import Caption, CaptionNode, CaptionSet, SRTWriter
 from pydub import AudioSegment
-from moviepy.editor import AudioFileClip, VideoFileClip
+from pytube import YouTube
 
-from src.prompts import SINGLE_FRAME_FOCUS, SEQUENTIAL_NARRATION
-from pathlib import Path
+from src.prompts import SEQUENTIAL_NARRATION, SINGLE_FRAME_FOCUS
 
 
 def get_video_length(video_path):
@@ -147,3 +151,54 @@ def overlay_audio_on_video(video_path, audio_path, output_path):
     video_clip = video_clip.set_audio(audio_clip)
     video_clip.write_videofile(output_path, codec="libx264")
     return output_path
+
+
+def generate_subtitles(
+    text, video_length, output_path, num_chars_per_line=50, language="en-US"
+):
+    captions = CaptionSet({language: []})
+
+    words = (
+        text if language == "ja-JP" else text.split(" ")
+    )  # Japanese doesn't use spaces between words
+    word_time = video_length / len(words)
+    current_time = 0
+    line_length = 0
+    line_start_time = 0
+    line_words = []
+
+    for i, word in enumerate(words):
+        word_length = len(word)
+        if (
+            line_length + word_length > num_chars_per_line
+            or current_time >= video_length
+            or i == len(words) - 1
+        ):
+            # Create a new caption for the line
+            start_time = line_start_time * 1000000  # Convert to milliseconds
+            end_time = current_time * 1000000  # Convert to milliseconds
+            caption_text = " ".join(line_words)
+            captions.get_captions(language).append(
+                Caption(start_time, end_time, [CaptionNode.create_text(caption_text)])
+            )
+
+            # Reset line variables
+            line_length = 0
+            line_start_time = current_time
+            line_words = []
+
+        line_words.append(word)
+        line_length += word_length + 1  # Add 1 for the space
+        current_time += word_time
+        # print(current_time, line_length, word)
+
+    # Write the captions to a .srt file
+    with open(output_path, "w") as f:
+        f.write(SRTWriter().write(captions))
+
+    return output_path
+
+
+def add_subtitles_to_video(video_path, srt_file, output_path):
+    command = f'ffmpeg -y -i {video_path} -vf "subtitles={srt_file}" {output_path}'
+    subprocess.run(command, shell=True, check=True)
